@@ -1,0 +1,224 @@
+# version: '3.8'
+
+services:
+  # PostgreSQL Database
+  db:
+    image: postgres:15
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    env_file:
+      - .env
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB:-learnly_db}
+      - POSTGRES_USER=${POSTGRES_USER:-learnly_user}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-learnly_password}
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-learnly_user} -d ${POSTGRES_DB:-learnly_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - learnly-network
+
+  # Redis for Celery, Caching, and Sessions
+  redis:
+    image: redis:7.4-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - learnly-network
+
+  # Django API Application
+  learnly-api:
+    build:
+      context: ./learnly-api
+      dockerfile: Dockerfile
+    command: gunicorn --bind 0.0.0.0:8000 --workers 3 --timeout 120 --keep-alive 2 learnly.wsgi:application
+    volumes:
+      - ./learnly-api:/app
+      - static_volume:/app/staticfiles
+      - media_volume:/app/mediafiles
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      - DEBUG=${DEBUG:-False}
+      - DJANGO_SETTINGS_MODULE=${DJANGO_SETTINGS_MODULE:-learnly.settings.production}
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - SUPERUSER_USERNAME=${SUPERUSER_USERNAME:-admin}
+      - SUPERUSER_EMAIL=${SUPERUSER_EMAIL:-admin@learnly.com}
+      - SUPERUSER_PASSWORD=${SUPERUSER_PASSWORD:-admin123}
+      - SUPERUSER_FIRST_NAME=${SUPERUSER_FIRST_NAME:-Admin}
+      - SUPERUSER_LAST_NAME=${SUPERUSER_LAST_NAME:-User}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - learnly-network
+
+  # Celery Worker for API
+  learnly-api-celery:
+    build:
+      context: ./learnly-api
+      dockerfile: Dockerfile
+    command: celery -A core worker --loglevel=info
+    volumes:
+      - ./learnly-api:/app
+    env_file:
+      - .env
+    environment:
+      - DEBUG=${DEBUG:-False}
+      - DJANGO_SETTINGS_MODULE=${DJANGO_SETTINGS_MODULE:-learnly.settings.production}
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - learnly-network
+
+  # Celery Beat (Scheduler) for API
+  learnly-api-celery-beat:
+    build:
+      context: ./learnly-api
+      dockerfile: Dockerfile
+    command: celery -A core beat --loglevel=info
+    volumes:
+      - ./learnly-api:/app
+    env_file:
+      - .env
+    environment:
+      - DEBUG=${DEBUG:-False}
+      - DJANGO_SETTINGS_MODULE=${DJANGO_SETTINGS_MODULE:-learnly.settings.production}
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - learnly-network
+
+  # Celery Flower (Monitoring) for API
+  learnly-api-flower:
+    build:
+      context: ./learnly-api
+      dockerfile: Dockerfile
+    command: celery -A core flower --port=5555
+    volumes:
+      - ./learnly-api:/app
+    ports:
+      - "5555:5555"
+    env_file:
+      - .env
+    environment:
+      - DEBUG=${DEBUG:-False}
+      - DJANGO_SETTINGS_MODULE=${DJANGO_SETTINGS_MODULE:-learnly.settings.production}
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - learnly-network
+
+  # Flask Web Application
+  learnly-web:
+    build:
+      context: ./learnly-web
+      dockerfile: Dockerfile
+    command: python run.py
+    volumes:
+      - ./learnly-web/learnly_web:/app
+      - web_session_volume:/app/flask_session
+      - web_logs_volume:/app/logs
+      - web_static_volume:/app/static
+    ports:
+      - "5000:5000"
+    env_file:
+      - .env
+    environment:
+      - FLASK_ENV=production
+      - SECRET_KEY=${WEB_SECRET_KEY:-your-secret-key-change-in-production}
+      - API_BASE_URL=${API_BASE_URL:-http://learnly-api:8000/api/v1}
+      - DEBUG=${WEB_DEBUG:-False}
+      - SESSION_TYPE=filesystem
+      - SESSION_FILE_DIR=/app/flask_session
+      - SESSION_FILE_THRESHOLD=500
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - LOG_LEVEL=INFO
+      - LOG_FILE=/app/logs/learnly_web.log
+    depends_on:
+      learnly-api:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - learnly-network
+
+  # Nginx Reverse Proxy
+  # Nginx Reverse Proxy Service
+  # This service runs an Nginx container that acts as a reverse proxy for the Learnly application.
+  # It listens on ports 80 (HTTP) and 443 (HTTPS), forwarding incoming requests to the appropriate backend services:
+  # - Requests to the root path ("/") are proxied to the Flask web application (learnly-web).
+  # - Requests to "/api/" are proxied to the Django API application (learnly-api).
+  # It also serves static and media files for both the API and web frontend by mounting their respective directories.
+  # The Nginx configuration is provided via the mounted ./nginx.conf file.
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf
+      - ./learnly-api/staticfiles:/var/www/html/staticfiles
+      - ./learnly-api/mediafiles:/var/www/html/mediafiles
+      - ./learnly-web/learnly_web/static:/var/www/html/web-static
+      - ./certbot/conf:/etc/letsencrypt
+      - ./certbot/www:/var/www/certbot
+    depends_on:
+      - learnly-api
+      - learnly-web
+    networks:
+      - learnly-network
+
+volumes:
+  postgres_data:
+  redis_data:
+  static_volume:
+  media_volume:
+  web_session_volume:
+  web_logs_volume:
+  web_static_volume:
+
+networks:
+  learnly-network:
+    driver: bridge
