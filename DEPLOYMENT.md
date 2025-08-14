@@ -62,7 +62,7 @@ SECRET_KEY=your-django-secret-key
 AWS_ACCESS_KEY_ID=your_aws_key
 AWS_SECRET_ACCESS_KEY=your_aws_secret
 AWS_STORAGE_BUCKET_NAME=your_bucket_name
-AWS_S3_REGION_NAME=eu-west-1
+AWS_S3_REGION_NAME=af-south-1
 
 # Email Configuration
 SMTP_SERVER=smtp.gmail.com
