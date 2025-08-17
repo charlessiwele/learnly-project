@@ -69,11 +69,11 @@ SMTP_SERVER=smtp.gmail.com
 SMTP_PORT=587
 SMTP_USERNAME=your_email@gmail.com
 SMTP_PASSWORD=your_app_password
-ADMIN_EMAIL=admin@learnly.com
+ADMIN_EMAIL=admin@learnly.co.za
 
 # Superuser Configuration
 SUPERUSER_USERNAME=admin
-SUPERUSER_EMAIL=admin@learnly.com
+SUPERUSER_EMAIL=admin@learnly.co.za
 SUPERUSER_PASSWORD=admin123
 SUPERUSER_FIRST_NAME=Admin
 SUPERUSER_LAST_NAME=User
