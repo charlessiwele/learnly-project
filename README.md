@@ -296,13 +296,15 @@ Optional: Filter by service name
 To stream logs from a specific service (e.g., web), run:
 
 docker-compose logs -f learnly-web
-docker-compose logs -f learnly-api
+docker-compose logs --tail=50 -f learnly-web
 docker-compose logs -f nginx
+docker-compose logs --tail=50 -f nginx
 docker-compose logs -f learnly-api-celery
+docker-compose logs --tail=50 -f learnly-api-celery
 docker-compose logs -f api-celery-beat
+docker-compose logs --tail=50 -f api-celery-beat
 docker-compose logs -f learnly-api-flower
-
-docker logs projects-learnly-web-1 --tail 20
+docker-compose logs --tail=50 -f learnly-api-flower
 
 
 docker-compose up -d --build
@@ -361,3 +363,7 @@ An unexpected error occurred:
 too many failed authorizations (5) for "www.learnly.co.za" in the last 1h0m0s, retry after 2025-08-09 12:48:50 UTC: see https://letsencrypt.org/docs/rate-limits/#authorization-failures-per-hostname-per-account
 Ask for help or search for solutions at https://community.letsencrypt.org. See the logfile /var/log/letsencrypt/letsencrypt.log or re-run Certbot with -v for more details.
 [ec2-user@ip-10-0-7-76 projects]$ 
+
+docker-compose logs -f --tail=50
+docker-compose logs -f --tail=50 learnly-web
+docker-compose logs -f --tail=50 learnly-api
